@@ -1,0 +1,329 @@
+{
+  "name": "Build Your Own AI Shopping Assistant | Part 2",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "bearer <api_key>"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            },
+            {
+              "name": "response_format",
+              "value": "verbose_json"
+            },
+            {
+              "name": "language",
+              "value": "en"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        -160
+      ],
+      "id": "f6537cd5-e6f1-4cb8-9e83-fbea0a8faea5",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -672,
+        -160
+      ],
+      "id": "90d75f1d-e431-4b05-b0a5-7fb0422534fc",
+      "name": "Get a file",
+      "webhookId": "4220c4bb-f4ce-43cb-bdc2-e3be7f0db156"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bc6d2ae1-d4f2-43e5-ae18-7f56eda4c8a6",
+              "leftValue": "={{ $json.message.voice }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -896,
+        -80
+      ],
+      "id": "a121f022-a73f-4e95-be3e-e83e62de2886",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        368,
+        -64
+      ],
+      "id": "88f307e3-c55e-4704-9838-68d93a90a92b",
+      "name": "Send a text message",
+      "webhookId": "466f0226-b782-432f-be13-f4a336073dea"
+    },
+    {
+      "parameters": {
+        "url": "http://api.scraperapi.com",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key"
+            },
+            {
+              "name": "url",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {},
+        "optimizeResponse": true,
+        "responseType": "html",
+        "cssSelector": "div.s-search-results",
+        "onlyContent": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Return_Only_Content', ``, 'boolean') }}"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        160
+      ],
+      "id": "77b36d57-0b1b-4152-8707-7e55f5248fbc",
+      "name": "Scraper API"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        16,
+        160
+      ],
+      "id": "6ab24785-4810-4cf9-9496-852278c6a86d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "A7ZWAAWk6kN0VWzJ",
+          "name": "Google Gemini(PaLM) Api account 749"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}{{ $json.text }}",
+        "options": {
+          "systemMessage": "=You are Maya, a shopping and styling assistant on Telegram.\n\n## Your Job\n\n1. **Product Search**: User asks \"shoes under 5000\" → Search Amazon → Show results\n2. **Styling Advice**: User asks \"how to style blue jeans\" or \"outfit for wedding\" → Ask questions → Give personalized styling tips\n\n## When to Use Scraper API Tool\n\n### For Product Searches Only\n\nWhen user requests products (e.g., \"I want sneakers under ₹3000\" or \"show me dresses\"), follow these steps:\n\n1. **Extract the search query** from user's message\n2. **Build the Amazon India search URL**: \n   - Format: `https://www.amazon.in/s?k=SEARCH_QUERY`\n   - Replace spaces with `+` in the query\n   - Example: \"white sneakers under 3000\" → `https://www.amazon.in/s?k=white+sneakers+under+3000`\n\n3. **Call the Scraper API tool** with the Amazon URL as the `url` parameter\n   - The tool already has api_key configured\n   - You only need to provide the Amazon search URL\n\n4. **Parse the response** and extract:\n   - Product name\n   - Price\n   - Rating\n   - Product URL\n\n5. **Show top 5 products** in clean format\n\n**Example Flow:**\n- User says: \"show me running shoes under 2000\"\n- You create URL: `https://www.amazon.in/s?k=running+shoes+under+2000`\n- Call tool with this URL\n- Display top 5 results from the scraped data\n\n## Styling Consultant Mode\n\nWhen user asks for styling advice (without wanting to search products):\n\n**Step 1: Understand the Context**\nAsk clarifying questions:\n- \"What's the occasion? (casual/formal/party/wedding/office)\"\n- \"What's your preferred style? (traditional/western/fusion)\"\n- \"Any color preferences?\"\n- \"What season/weather?\"\n\n**Step 2: Give Personalized Styling Tips**\nBased on their answers, provide:\n- Outfit combinations (top + bottom + footwear)\n- Color coordination suggestions\n- Accessory recommendations (jewelry, bags, belts)\n- Fabric/material suggestions for the occasion\n- Styling hacks or pro tips\n\n**Example:**\n\n*User: \"How to style a kurti?\"*\n**You:** \"I'd love to help! Quick questions:\n- What occasion? (Office/casual/festive)\n- What color is the kurti?\n- Traditional or modern look?\"\n\n*User: \"Casual, blue kurti, modern look\"*\n**You:** \n```\n💙 Blue Kurti - Modern Casual Look\n\n👖 Bottom: White or beige cigarette pants / ankle-length jeans\n👠 Footwear: White sneakers or tan kolhapuris\n💍 Accessories: Minimal - small hoops, watch, crossbody bag\n✨ Pro tip: Roll up kurti sleeves slightly for a relaxed vibe\n\nWant me to find similar kurtis on Amazon?\n```\n\n## Response Format\n\n**For Products:**\n```\n**Product Name**\nPrice: ₹XXXX\n⭐ Rating: X.X\n[View](amazon-link)\n```\n\n**For Styling Advice:**\n```\n[Emoji] [Product/Occasion Name] - [Style Type]\n\n[Item Category]: Specific suggestion\n[Item Category]: Specific suggestion\n✨ Pro tip: Helpful styling hack\n\nWant me to search for any of these items?\n```\n\n## Important Rules\n\n- **Product searches**: Always use the Scraper API tool by passing the Amazon India search URL\n- **Styling advice**: Have a conversation first, understand context\n- Search Amazon India only (amazon.in)\n- Only show real data from Scraper API response\n- Never make up product details\n- Show maximum 5 products per search\n- Keep messages short and friendly\n- Use relevant emojis: 👕 👗 👠 💍 ✨ 👖 💙\n- Always offer to search products after giving styling tips\n- If scraping fails, inform user politely and suggest they try again"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        16,
+        -64
+      ],
+      "id": "6d188708-abb7-4501-a7d6-94ca1ec8dc85",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        -80
+      ],
+      "id": "ab0987cf-ff6e-4810-9669-9e12ae554b79",
+      "name": "Telegram Trigger",
+      "webhookId": "fa1c6453-b2b5-4353-ae30-b28d63dfa146"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "item = _input.item\n\n# Modify the binary data properties directly\nif item.binary and 'data' in item.binary:\n    # Replace .oga with .ogg in fileName\n    if item.binary['data'].get('fileName'):\n        item.binary['data']['fileName'] = item.binary['data']['fileName'].replace('.oga', '.ogg')\n\nreturn item"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        -160
+      ],
+      "id": "ac87b9cd-6a77-4ded-b626-ebd438915ae8",
+      "name": "Code in Python (Beta)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Code in Python (Beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scraper API": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python (Beta)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4229f63d-6c1c-487f-90ca-c4a72e308823",
+  "meta": {
+    "instanceId": "969257b09ad2942bbaff2e2288304f4969030574d109cdeca05bf11f630884df"
+  },
+  "id": "ow6m5WYBAakl5UGF",
+  "tags": []
+}
